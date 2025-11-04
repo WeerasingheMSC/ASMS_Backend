@@ -57,15 +57,25 @@ public class AuthService {
 
     @Transactional
     public LoginResponse login(LoginRequest request) {
+        // Find user by username, email, or phone number
+        User user = userRepository.findByUsername(request.getUsername())
+                .or(() -> userRepository.findByEmail(request.getUsername()))
+                .or(() -> userRepository.findByPhoneNumber(request.getUsername()))
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        // Check if user account is active
+        if (!user.getIsActive()) {
+            throw new BadRequestException("Account is deactivated. Please contact administrator.");
+        }
+
+        // Authenticate using the actual username from the database
         Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getUsername(), request.getPassword())
+                new UsernamePasswordAuthenticationToken(user.getUsername(), request.getPassword())
         );
 
         SecurityContextHolder.getContext().setAuthentication(authentication);
-        String token = jwtTokenProvider.generateToken(authentication);
 
-        User user = userRepository.findByUsername(request.getUsername())
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        String token = jwtTokenProvider.generateToken(authentication);
 
         return LoginResponse.builder()
                 .token(token)
