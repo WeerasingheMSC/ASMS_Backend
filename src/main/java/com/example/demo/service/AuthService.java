@@ -1,65 +1,175 @@
 package com.example.demo.service;
 
 import com.example.demo.dto.*;
+import com.example.demo.exception.BadRequestException;
+import com.example.demo.exception.ResourceNotFoundException;
+import com.example.demo.model.Role;
 import com.example.demo.model.User;
 import com.example.demo.repository.UserRepository;
+import com.example.demo.security.JwtTokenProvider;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import java.util.Optional;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Service
+@RequiredArgsConstructor
 public class AuthService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final AuthenticationManager authenticationManager;
+    private final JwtTokenProvider jwtTokenProvider;
+    private final EmailService emailService;
 
-    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
-        this.userRepository = userRepository;
-        this.passwordEncoder = passwordEncoder;
+    @Value("${admin.username}")
+    private String adminUsername;
+
+    @Value("${admin.password}")
+    private String adminPassword;
+
+    @Value("${admin.email}")
+    private String adminEmail;
+
+    @Transactional
+    public void initializeAdmin() {
+        if (!userRepository.existsByUsername(adminUsername)) {
+            User admin = User.builder()
+                    .username(adminUsername)
+                    .email(adminEmail)
+                    .password(passwordEncoder.encode(adminPassword))
+                    .role(Role.ADMIN)
+                    .isActive(true)
+                    .isPasswordChanged(true)
+                    .build();
+            userRepository.save(admin);
+            System.out.println("Admin user initialized successfully");
+        }
     }
 
-    public AuthResponse signup(SignupRequest request) {
-        Optional<User> existingUser = userRepository.findByEmail(request.getEmail());
-        if (existingUser.isPresent()) {
-            throw new RuntimeException("Email already registered");
+    @Transactional
+    public LoginResponse login(LoginRequest request) {
+        Authentication authentication = authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(request.getUsername(), request.getPassword())
+        );
+
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        String token = jwtTokenProvider.generateToken(authentication);
+
+        User user = userRepository.findByUsername(request.getUsername())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        return LoginResponse.builder()
+                .token(token)
+                .username(user.getUsername())
+                .email(user.getEmail())
+                .role(user.getRole().name())
+                .message("Login successful")
+                .build();
+    }
+
+    @Transactional
+    public ApiResponse customerSignup(CustomerSignupRequest request) {
+        if (userRepository.existsByUsername(request.getUsername())) {
+            throw new BadRequestException("Username already exists");
         }
 
-        User user = User.builder()
-                .name(request.getName())
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new BadRequestException("Email already exists");
+        }
+
+        User customer = User.builder()
+                .username(request.getUsername())
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(request.getPassword()))
-                .role(request.getRole())
+                .role(Role.CUSTOMER)
+                .firstName(request.getFirstName())
+                .lastName(request.getLastName())
+                .phoneNumber(request.getPhoneNumber())
+                .address(request.getAddress())
+                .isActive(true)
+                .isPasswordChanged(true)
                 .build();
 
-        User savedUser = userRepository.save(user);
-        
-        return new AuthResponse(
-                savedUser.getId(),
-                savedUser.getName(),
-                savedUser.getEmail(),
-                savedUser.getRole(),
-                "User registered successfully",
-                null
-        );
+        userRepository.save(customer);
+
+        return ApiResponse.builder()
+                .success(true)
+                .message("Customer registered successfully")
+                .build();
     }
 
-    public AuthResponse login(LoginRequest request) {
-        User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new RuntimeException("User not found"));
+    @Transactional(readOnly = true)
+    public ApiResponse verifyResetToken(String token) {
+        User user = userRepository.findByResetToken(token)
+                .orElseThrow(() -> new BadRequestException("Invalid token"));
 
-        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            throw new RuntimeException("Invalid credentials");
+        if (user.getResetTokenExpiry().isBefore(LocalDateTime.now())) {
+            throw new BadRequestException("Token has expired. Please request a new activation link.");
         }
 
-        // Return user details for frontend
-        return new AuthResponse(
-                user.getId(),
-                user.getName(),
-                user.getEmail(),
-                user.getRole(),
-                "Login successful",
-                null // JWT token will be added later
-        );
+        return ApiResponse.builder()
+                .success(true)
+                .message("Token is valid. Please set your password using the POST /api/auth/set-password endpoint.")
+                .data(UserResponse.builder()
+                        .username(user.getUsername())
+                        .email(user.getEmail())
+                        .firstName(user.getFirstName())
+                        .lastName(user.getLastName())
+                        .build())
+                .build();
+    }
+
+    @Transactional
+    public ApiResponse setPassword(SetPasswordRequest request) {
+        User user = userRepository.findByResetToken(request.getToken())
+                .orElseThrow(() -> new BadRequestException("Invalid or expired token"));
+
+        if (user.getResetTokenExpiry().isBefore(LocalDateTime.now())) {
+            throw new BadRequestException("Token has expired");
+        }
+
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        user.setIsPasswordChanged(true);
+        user.setResetToken(null);
+        user.setResetTokenExpiry(null);
+
+        userRepository.save(user);
+
+        return ApiResponse.builder()
+                .success(true)
+                .message("Password set successfully. You can now login.")
+                .build();
+    }
+
+    @Transactional
+    public ApiResponse changePassword(ChangePasswordRequest request, String username) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        if (!passwordEncoder.matches(request.getOldPassword(), user.getPassword())) {
+            throw new BadRequestException("Old password is incorrect");
+        }
+
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        user.setIsPasswordChanged(true);
+        userRepository.save(user);
+
+        // Send email notification
+        emailService.sendPasswordChangedEmail(user.getEmail(), user.getUsername());
+
+        return ApiResponse.builder()
+                .success(true)
+                .message("Password changed successfully")
+                .build();
     }
 }
 

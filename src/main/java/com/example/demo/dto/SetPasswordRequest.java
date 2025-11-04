@@ -1,6 +1,5 @@
 package com.example.demo.dto;
 
-import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
@@ -12,13 +11,13 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class LoginRequest {
+public class SetPasswordRequest {
 
-    @NotBlank(message = "Username is required")
-    private String username;
+    @NotBlank(message = "Token is required")
+    private String token;
 
-    @NotBlank(message = "Password is required")
+    @NotBlank(message = "New password is required")
     @Size(min = 6, message = "Password must be at least 6 characters")
-    private String password;
+    private String newPassword;
 }
 
