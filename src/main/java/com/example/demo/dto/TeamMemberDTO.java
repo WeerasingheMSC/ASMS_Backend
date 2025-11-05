@@ -42,8 +42,9 @@ public class TeamMemberDTO {
     @NotNull(message = "Working hours are required")
     private String workingHoursPerDay;
 
-    @NotBlank(message = "Team ID is required")
-    private String teamId;
+    // Team fields (replacing teamId String with team relationship)
+    private Long teamId;
+    private String teamName;
 
     // Supervisor fields
     private Long supervisorId;
@@ -55,7 +56,7 @@ public class TeamMemberDTO {
     public TeamMemberDTO(Long id, String fullName, String nic, String contactNo,
                          LocalDate birthDate, Integer age, String address,
                          String city, String specialization, LocalDate joinedDate,
-                         String workingHoursPerDay, String teamId,
+                         String workingHoursPerDay, Long teamId, String teamName,
                          Long supervisorId, String supervisorName) {
         this.id = id;
         this.fullName = fullName;
@@ -69,6 +70,7 @@ public class TeamMemberDTO {
         this.joinedDate = joinedDate;
         this.workingHoursPerDay = workingHoursPerDay;
         this.teamId = teamId;
+        this.teamName = teamName;
         this.supervisorId = supervisorId;
         this.supervisorName = supervisorName;
     }
@@ -107,8 +109,11 @@ public class TeamMemberDTO {
     public LocalDate getJoinedDate() { return joinedDate; }
     public void setJoinedDate(LocalDate joinedDate) { this.joinedDate = joinedDate; }
 
-    public String getTeamId() { return teamId; }
-    public void setTeamId(String teamId) { this.teamId = teamId; }
+    public Long getTeamId() { return teamId; }
+    public void setTeamId(Long teamId) { this.teamId = teamId; }
+
+    public String getTeamName() { return teamName; }
+    public void setTeamName(String teamName) { this.teamName = teamName; }
 
     public Long getSupervisorId() { return supervisorId; }
     public void setSupervisorId(Long supervisorId) { this.supervisorId = supervisorId; }

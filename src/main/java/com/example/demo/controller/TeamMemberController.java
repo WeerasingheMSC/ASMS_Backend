@@ -51,7 +51,7 @@ public class TeamMemberController {
     }
 
     @GetMapping("/team/{teamId}")
-    public ResponseEntity<ApiResponse<List<TeamMemberDTO>>> getTeamMembersByTeamId(@PathVariable String teamId) {
+    public ResponseEntity<ApiResponse<List<TeamMemberDTO>>> getTeamMembersByTeamId(@PathVariable Long teamId) {
         try {
             List<TeamMemberDTO> teamMembers = teamMemberService.getTeamMembersByTeamId(teamId);
             return ResponseEntity.ok(ApiResponse.success(teamMembers, "Team members retrieved successfully for team: " + teamId));
@@ -80,6 +80,17 @@ public class TeamMemberController {
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(ApiResponse.error("Failed to retrieve team members without supervisor: " + e.getMessage()));
+        }
+    }
+
+    @GetMapping("/no-team")
+    public ResponseEntity<ApiResponse<List<TeamMemberDTO>>> getTeamMembersWithoutTeam() {
+        try {
+            List<TeamMemberDTO> teamMembers = teamMemberService.getTeamMembersWithoutTeam();
+            return ResponseEntity.ok(ApiResponse.success(teamMembers, "Team members without team retrieved successfully"));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Failed to retrieve team members without team: " + e.getMessage()));
         }
     }
 
@@ -180,6 +191,33 @@ public class TeamMemberController {
         }
     }
 
+    // NEW: Get team stats with member details
+    @GetMapping("/team-stats/{teamId}")
+    public ResponseEntity<ApiResponse<TeamMemberService.TeamStatsDTO>> getTeamStatsWithMembers(@PathVariable Long teamId) {
+        try {
+            TeamMemberService.TeamStatsDTO teamStats = teamMemberService.getTeamStatsWithMembers(teamId);
+            return ResponseEntity.ok(ApiResponse.success(teamStats, "Team statistics retrieved successfully"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponse.error(e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Failed to retrieve team statistics: " + e.getMessage()));
+        }
+    }
+
+    // NEW: Get all teams with their statistics
+    @GetMapping("/all-teams-stats")
+    public ResponseEntity<ApiResponse<List<TeamMemberService.TeamStatsDTO>>> getAllTeamsWithStats() {
+        try {
+            List<TeamMemberService.TeamStatsDTO> teamsStats = teamMemberService.getAllTeamsWithStats();
+            return ResponseEntity.ok(ApiResponse.success(teamsStats, "All teams statistics retrieved successfully"));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Failed to retrieve teams statistics: " + e.getMessage()));
+        }
+    }
+
     @PostMapping("/member-create")
     public ResponseEntity<ApiResponse<TeamMemberDTO>> createTeamMember(
             @Valid @RequestBody TeamMemberDTO teamMemberDTO,
@@ -254,6 +292,24 @@ public class TeamMemberController {
         }
     }
 
+    @PatchMapping("/{id}/team/{teamId}")
+    public ResponseEntity<ApiResponse<TeamMemberDTO>> updateTeam(
+            @PathVariable Long id,
+            @PathVariable Long teamId) {
+        try {
+            return teamMemberService.updateTeam(id, teamId)
+                    .map(updatedMember -> ResponseEntity.ok(ApiResponse.success(updatedMember, "Team updated successfully")))
+                    .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)
+                            .body(ApiResponse.error("Team member not found with id: " + id)));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponse.error(e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Failed to update team: " + e.getMessage()));
+        }
+    }
+
     @PatchMapping("/{id}/remove-supervisor")
     public ResponseEntity<ApiResponse<TeamMemberDTO>> removeSupervisor(@PathVariable Long id) {
         try {
@@ -264,6 +320,19 @@ public class TeamMemberController {
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(ApiResponse.error("Failed to remove supervisor: " + e.getMessage()));
+        }
+    }
+
+    @PatchMapping("/{id}/remove-team")
+    public ResponseEntity<ApiResponse<TeamMemberDTO>> removeTeam(@PathVariable Long id) {
+        try {
+            return teamMemberService.removeTeam(id)
+                    .map(updatedMember -> ResponseEntity.ok(ApiResponse.success(updatedMember, "Team removed successfully")))
+                    .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)
+                            .body(ApiResponse.error("Team member not found with id: " + id)));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Failed to remove team: " + e.getMessage()));
         }
     }
 
@@ -283,7 +352,7 @@ public class TeamMemberController {
     }
 
     @GetMapping("/stats/team/{teamId}/count")
-    public ResponseEntity<ApiResponse<Long>> getTeamMemberCountByTeam(@PathVariable String teamId) {
+    public ResponseEntity<ApiResponse<Long>> getTeamMemberCountByTeam(@PathVariable Long teamId) {
         try {
             long count = teamMemberService.getTeamMemberCountByTeam(teamId);
             return ResponseEntity.ok(ApiResponse.success(count, "Team member count retrieved successfully"));

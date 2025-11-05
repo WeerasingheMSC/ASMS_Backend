@@ -1,9 +1,11 @@
 package com.example.demo.service;
 
 import com.example.demo.dto.TeamMemberDTO;
+import com.example.demo.model.Team;
 import com.example.demo.model.TeamMember;
 import com.example.demo.model.User;
 import com.example.demo.repository.TeamMemberRepository;
+import com.example.demo.repository.TeamRepository;
 import com.example.demo.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -25,6 +27,9 @@ public class TeamMemberService {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private TeamRepository teamRepository;
+
     public List<TeamMemberDTO> getAllTeamMembers() {
         return teamMemberRepository.findAll()
                 .stream()
@@ -37,7 +42,7 @@ public class TeamMemberService {
                 .map(this::convertToDTO);
     }
 
-    public List<TeamMemberDTO> getTeamMembersByTeamId(String teamId) {
+    public List<TeamMemberDTO> getTeamMembersByTeamId(Long teamId) {
         return teamMemberRepository.findByTeamId(teamId)
                 .stream()
                 .map(this::convertToDTO)
@@ -56,6 +61,13 @@ public class TeamMemberService {
             throw new IllegalArgumentException("Team member with NIC " + teamMemberDTO.getNic() + " already exists");
         }
 
+        // Validate team if provided
+        Team team = null;
+        if (teamMemberDTO.getTeamId() != null) {
+            team = teamRepository.findById(teamMemberDTO.getTeamId())
+                    .orElseThrow(() -> new IllegalArgumentException("Team not found with ID: " + teamMemberDTO.getTeamId()));
+        }
+
         // Validate supervisor if provided
         User supervisor = null;
         if (teamMemberDTO.getSupervisorId() != null) {
@@ -63,7 +75,7 @@ public class TeamMemberService {
                     .orElseThrow(() -> new IllegalArgumentException("Supervisor not found with ID: " + teamMemberDTO.getSupervisorId()));
         }
 
-        TeamMember teamMember = convertToEntity(teamMemberDTO, supervisor);
+        TeamMember teamMember = convertToEntity(teamMemberDTO, team, supervisor);
         TeamMember savedMember = teamMemberRepository.save(teamMember);
         return convertToDTO(savedMember);
     }
@@ -83,6 +95,13 @@ public class TeamMemberService {
                     // Validate working hours
                     validateWorkingHours(teamMemberDTO.getWorkingHoursPerDay());
 
+                    // Validate team if provided
+                    Team team = null;
+                    if (teamMemberDTO.getTeamId() != null) {
+                        team = teamRepository.findById(teamMemberDTO.getTeamId())
+                                .orElseThrow(() -> new IllegalArgumentException("Team not found with ID: " + teamMemberDTO.getTeamId()));
+                    }
+
                     // Validate supervisor if provided
                     User supervisor = null;
                     if (teamMemberDTO.getSupervisorId() != null) {
@@ -90,7 +109,7 @@ public class TeamMemberService {
                                 .orElseThrow(() -> new IllegalArgumentException("Supervisor not found with ID: " + teamMemberDTO.getSupervisorId()));
                     }
 
-                    TeamMember updatedMember = convertToEntity(teamMemberDTO, supervisor);
+                    TeamMember updatedMember = convertToEntity(teamMemberDTO, team, supervisor);
                     updatedMember.setId(id);
                     updatedMember.setCreatedAt(existingMember.getCreatedAt()); // Preserve creation timestamp
 
@@ -130,7 +149,7 @@ public class TeamMemberService {
                 .collect(Collectors.toList());
     }
 
-    public long getTeamMemberCountByTeam(String teamId) {
+    public long getTeamMemberCountByTeam(Long teamId) {
         return teamMemberRepository.countByTeamId(teamId);
     }
 
@@ -161,9 +180,40 @@ public class TeamMemberService {
                 });
     }
 
+    public Optional<TeamMemberDTO> updateTeam(Long teamMemberId, Long teamId) {
+        return teamMemberRepository.findById(teamMemberId)
+                .map(teamMember -> {
+                    Team team = null;
+                    if (teamId != null) {
+                        team = teamRepository.findById(teamId)
+                                .orElseThrow(() -> new IllegalArgumentException("Team not found with ID: " + teamId));
+                    }
+                    teamMember.setTeam(team);
+                    TeamMember updatedMember = teamMemberRepository.save(teamMember);
+                    return convertToDTO(updatedMember);
+                });
+    }
+
+    public Optional<TeamMemberDTO> removeTeam(Long teamMemberId) {
+        return teamMemberRepository.findById(teamMemberId)
+                .map(teamMember -> {
+                    teamMember.setTeam(null);
+                    TeamMember updatedMember = teamMemberRepository.save(teamMember);
+                    return convertToDTO(updatedMember);
+                });
+    }
+
     public List<TeamMemberDTO> getTeamMembersWithoutSupervisor() {
         return teamMemberRepository.findBySupervisorIsNull()
                 .stream()
+                .map(this::convertToDTO)
+                .collect(Collectors.toList());
+    }
+
+    public List<TeamMemberDTO> getTeamMembersWithoutTeam() {
+        return teamMemberRepository.findAll()
+                .stream()
+                .filter(member -> member.getTeam() == null)
                 .map(this::convertToDTO)
                 .collect(Collectors.toList());
     }
@@ -199,6 +249,46 @@ public class TeamMemberService {
                 .collect(Collectors.toList());
     }
 
+    // NEW: Get team statistics with member details
+    public TeamStatsDTO getTeamStatsWithMembers(Long teamId) {
+        Team team = teamRepository.findById(teamId)
+                .orElseThrow(() -> new IllegalArgumentException("Team not found with ID: " + teamId));
+
+        List<TeamMember> members = teamMemberRepository.findByTeamIdWithTeamDetails(teamId);
+
+        return TeamStatsDTO.builder()
+                .teamId(team.getId())
+                .teamName(team.getName())
+                .specialization(team.getSpecialization().name())
+                .totalMembers(members.size())
+                .averageAge(calculateAverageAge(members))
+                .totalWorkingHours(calculateTotalWorkingHours(members))
+                .memberDetails(members.stream().map(this::convertToDTO).collect(Collectors.toList()))
+                .build();
+    }
+
+    // NEW: Get all teams with their statistics
+    public List<TeamStatsDTO> getAllTeamsWithStats() {
+        List<Team> teams = teamRepository.findAll();
+        return teams.stream()
+                .map(team -> getTeamStatsWithMembers(team.getId()))
+                .collect(Collectors.toList());
+    }
+
+    private double calculateAverageAge(List<TeamMember> members) {
+        if (members.isEmpty()) return 0;
+        return members.stream()
+                .mapToInt(TeamMember::getAge)
+                .average()
+                .orElse(0);
+    }
+
+    private int calculateTotalWorkingHours(List<TeamMember> members) {
+        return members.stream()
+                .mapToInt(member -> Integer.parseInt(member.getWorkingHoursPerDay()))
+                .sum();
+    }
+
     private void validateAge(LocalDate birthDate) {
         int age = Period.between(birthDate, LocalDate.now()).getYears();
         if (age < 18 || age > 80) {
@@ -219,8 +309,8 @@ public class TeamMemberService {
         }
     }
 
-    // UPDATED: Convert DTO to Entity - working hours as String
-    private TeamMember convertToEntity(TeamMemberDTO dto, User supervisor) {
+    // UPDATED: Convert DTO to Entity - with team relationship
+    private TeamMember convertToEntity(TeamMemberDTO dto, Team team, User supervisor) {
         TeamMember entity = new TeamMember();
         entity.setFullName(dto.getFullName().trim());
         entity.setNic(dto.getNic().trim());
@@ -234,12 +324,13 @@ public class TeamMemberService {
         // Set working hours as String directly
         entity.setWorkingHoursPerDay(dto.getWorkingHoursPerDay());
 
-        entity.setTeamId(dto.getTeamId());
+        // Set team relationship
+        entity.setTeam(team);
         entity.setSupervisor(supervisor);
         return entity;
     }
 
-    // UPDATED: Convert Entity to DTO - working hours as String
+    // UPDATED: Convert Entity to DTO - with team relationship
     private TeamMemberDTO convertToDTO(TeamMember entity) {
         TeamMemberDTO dto = new TeamMemberDTO();
         dto.setId(entity.getId());
@@ -256,9 +347,108 @@ public class TeamMemberService {
         // Get working hours as String directly
         dto.setWorkingHoursPerDay(entity.getWorkingHoursPerDay());
 
+        // Set team information
         dto.setTeamId(entity.getTeamId());
+        dto.setTeamName(entity.getTeamName());
+
+        // Set supervisor information
         dto.setSupervisorId(entity.getSupervisorId());
         dto.setSupervisorName(entity.getSupervisorName());
         return dto;
+    }
+
+    // NEW: Team Stats DTO inner class
+    public static class TeamStatsDTO {
+        private Long teamId;
+        private String teamName;
+        private String specialization;
+        private int totalMembers;
+        private double averageAge;
+        private int totalWorkingHours;
+        private List<TeamMemberDTO> memberDetails;
+
+        // Builder pattern
+        public static TeamStatsDTOBuilder builder() {
+            return new TeamStatsDTOBuilder();
+        }
+
+        // Getters and setters
+        public Long getTeamId() { return teamId; }
+        public void setTeamId(Long teamId) { this.teamId = teamId; }
+
+        public String getTeamName() { return teamName; }
+        public void setTeamName(String teamName) { this.teamName = teamName; }
+
+        public String getSpecialization() { return specialization; }
+        public void setSpecialization(String specialization) { this.specialization = specialization; }
+
+        public int getTotalMembers() { return totalMembers; }
+        public void setTotalMembers(int totalMembers) { this.totalMembers = totalMembers; }
+
+        public double getAverageAge() { return averageAge; }
+        public void setAverageAge(double averageAge) { this.averageAge = averageAge; }
+
+        public int getTotalWorkingHours() { return totalWorkingHours; }
+        public void setTotalWorkingHours(int totalWorkingHours) { this.totalWorkingHours = totalWorkingHours; }
+
+        public List<TeamMemberDTO> getMemberDetails() { return memberDetails; }
+        public void setMemberDetails(List<TeamMemberDTO> memberDetails) { this.memberDetails = memberDetails; }
+
+        public static class TeamStatsDTOBuilder {
+            private Long teamId;
+            private String teamName;
+            private String specialization;
+            private int totalMembers;
+            private double averageAge;
+            private int totalWorkingHours;
+            private List<TeamMemberDTO> memberDetails;
+
+            public TeamStatsDTOBuilder teamId(Long teamId) {
+                this.teamId = teamId;
+                return this;
+            }
+
+            public TeamStatsDTOBuilder teamName(String teamName) {
+                this.teamName = teamName;
+                return this;
+            }
+
+            public TeamStatsDTOBuilder specialization(String specialization) {
+                this.specialization = specialization;
+                return this;
+            }
+
+            public TeamStatsDTOBuilder totalMembers(int totalMembers) {
+                this.totalMembers = totalMembers;
+                return this;
+            }
+
+            public TeamStatsDTOBuilder averageAge(double averageAge) {
+                this.averageAge = averageAge;
+                return this;
+            }
+
+            public TeamStatsDTOBuilder totalWorkingHours(int totalWorkingHours) {
+                this.totalWorkingHours = totalWorkingHours;
+                return this;
+            }
+
+            public TeamStatsDTOBuilder memberDetails(List<TeamMemberDTO> memberDetails) {
+                this.memberDetails = memberDetails;
+                return this;
+            }
+
+            public TeamStatsDTO build() {
+                TeamStatsDTO stats = new TeamStatsDTO();
+                stats.setTeamId(this.teamId);
+                stats.setTeamName(this.teamName);
+                stats.setSpecialization(this.specialization);
+                stats.setTotalMembers(this.totalMembers);
+                stats.setAverageAge(this.averageAge);
+                stats.setTotalWorkingHours(this.totalWorkingHours);
+                stats.setMemberDetails(this.memberDetails);
+                return stats;
+            }
+        }
     }
 }

@@ -61,8 +61,10 @@ public class TeamMember {
     @Column(name = "working_hours_per_day", nullable = false, length = 2)
     private String workingHoursPerDay; // Store "4", "6", "8", etc.
 
-    @Column(name = "team_id", nullable = false, length = 50)
-    private String teamId;
+    // Foreign key relationship with Team table
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "team_id", referencedColumnName = "id")
+    private Team team;
 
     // Foreign key relationship with User table for supervisor
     @ManyToOne(fetch = FetchType.LAZY)
@@ -107,10 +109,8 @@ public class TeamMember {
         BODYWORK, INTERIOR, DIAGNOSTICS
     }
 
-//
     // Constructors
     public TeamMember() {}
-
 
     public void setId(Long id) { this.id = id; }
 
@@ -137,7 +137,7 @@ public class TeamMember {
 
     public void setWorkingHoursPerDay(String workingHoursPerDay) { this.workingHoursPerDay = workingHoursPerDay; }
 
-    public void setTeamId(String teamId) { this.teamId = teamId; }
+    public void setTeam(Team team) { this.team = team; }
 
     public void setSupervisor(User supervisor) { this.supervisor = supervisor; }
 
@@ -146,6 +146,14 @@ public class TeamMember {
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 
     // Utility methods
+    public Long getTeamId() {
+        return team != null ? team.getId() : null;
+    }
+
+    public String getTeamName() {
+        return team != null ? team.getName() : null;
+    }
+
     public Long getSupervisorId() {
         return supervisor != null ? supervisor.getId() : null;
     }

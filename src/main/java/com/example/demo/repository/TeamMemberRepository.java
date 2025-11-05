@@ -17,8 +17,11 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
     boolean existsByNicAndIdNot(String nic, Long id);
 
     // === Team-based Queries ===
-    List<TeamMember> findByTeamId(String teamId);
-    long countByTeamId(String teamId);
+    @Query("SELECT tm FROM TeamMember tm WHERE tm.team.id = :teamId")
+    List<TeamMember> findByTeamId(@Param("teamId") Long teamId);
+
+    @Query("SELECT COUNT(tm) FROM TeamMember tm WHERE tm.team.id = :teamId")
+    long countByTeamId(@Param("teamId") Long teamId);
 
     // === Supervisor Relationship Queries ===
     // Find all team members under a specific supervisor
@@ -42,8 +45,8 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
     List<TeamMember> findBySupervisorIdAndSupervisorActive(@Param("supervisorId") Long supervisorId);
 
     // Find team members by supervisor and team
-    @Query("SELECT tm FROM TeamMember tm WHERE tm.supervisor.id = :supervisorId AND tm.teamId = :teamId")
-    List<TeamMember> findBySupervisorIdAndTeamId(@Param("supervisorId") Long supervisorId, @Param("teamId") String teamId);
+    @Query("SELECT tm FROM TeamMember tm WHERE tm.supervisor.id = :supervisorId AND tm.team.id = :teamId")
+    List<TeamMember> findBySupervisorIdAndTeamId(@Param("supervisorId") Long supervisorId, @Param("teamId") Long teamId);
 
     // Count team members by supervisor and specialization
     @Query("SELECT COUNT(tm) FROM TeamMember tm WHERE tm.supervisor.id = :supervisorId AND tm.specialization = :specialization")
@@ -116,7 +119,6 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
             "LOWER(tm.nic) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
             "LOWER(tm.contactNo) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
             "LOWER(tm.address) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
-            "LOWER(tm.teamId) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
             "LOWER(tm.workingHoursPerDay) LIKE LOWER(CONCAT('%', :searchTerm, '%'))")
     List<TeamMember> searchTeamMembers(@Param("searchTerm") String searchTerm);
 
@@ -125,20 +127,19 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
             "(LOWER(tm.fullName) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
             "LOWER(tm.nic) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
             "LOWER(tm.contactNo) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
-            "LOWER(tm.teamId) LIKE LOWER(CONCAT('%', :searchTerm, '%')) OR " +
             "LOWER(tm.workingHoursPerDay) LIKE LOWER(CONCAT('%', :searchTerm, '%')))")
     List<TeamMember> searchTeamMembersBySupervisor(@Param("supervisorId") Long supervisorId,
                                                    @Param("searchTerm") String searchTerm);
 
     // === Combined Filters ===
     @Query("SELECT tm FROM TeamMember tm WHERE " +
-            "(:teamId IS NULL OR tm.teamId = :teamId) AND " +
+            "(:teamId IS NULL OR tm.team.id = :teamId) AND " +
             "(:specialization IS NULL OR tm.specialization = :specialization) AND " +
             "(:city IS NULL OR tm.city = :city) AND " +
             "(:supervisorId IS NULL OR tm.supervisor.id = :supervisorId) AND " +
             "(:workingHours IS NULL OR tm.workingHoursPerDay = :workingHours)")
     List<TeamMember> findByTeamIdAndSpecializationAndCityAndSupervisorIdAndWorkingHours(
-            @Param("teamId") String teamId,
+            @Param("teamId") Long teamId,
             @Param("specialization") TeamMember.Specialization specialization,
             @Param("city") TeamMember.District city,
             @Param("supervisorId") Long supervisorId,
@@ -146,12 +147,12 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
 
     // NEW: Combined filter without supervisor
     @Query("SELECT tm FROM TeamMember tm WHERE " +
-            "(:teamId IS NULL OR tm.teamId = :teamId) AND " +
+            "(:teamId IS NULL OR tm.team.id = :teamId) AND " +
             "(:specialization IS NULL OR tm.specialization = :specialization) AND " +
             "(:city IS NULL OR tm.city = :city) AND " +
             "(:workingHours IS NULL OR tm.workingHoursPerDay = :workingHours)")
     List<TeamMember> findByTeamIdAndSpecializationAndCityAndWorkingHours(
-            @Param("teamId") String teamId,
+            @Param("teamId") Long teamId,
             @Param("specialization") TeamMember.Specialization specialization,
             @Param("city") TeamMember.District city,
             @Param("workingHours") String workingHours);
@@ -164,6 +165,14 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
     // Find all team members with supervisor details (for reporting)
     @Query("SELECT tm FROM TeamMember tm JOIN FETCH tm.supervisor WHERE tm.supervisor IS NOT NULL")
     List<TeamMember> findAllWithSupervisorDetails();
+
+    // NEW: Find team members with team details
+    @Query("SELECT tm FROM TeamMember tm JOIN FETCH tm.team WHERE tm.team.id = :teamId")
+    List<TeamMember> findByTeamIdWithTeamDetails(@Param("teamId") Long teamId);
+
+    // NEW: Find all team members with team and supervisor details
+    @Query("SELECT tm FROM TeamMember tm JOIN FETCH tm.team JOIN FETCH tm.supervisor")
+    List<TeamMember> findAllWithTeamAndSupervisorDetails();
 
     // NEW: Find team members by multiple working hours
     @Query("SELECT tm FROM TeamMember tm WHERE tm.workingHoursPerDay IN :workingHoursList")
@@ -179,6 +188,11 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
     List<Object[]> getWorkingHoursDistribution();
 
     // NEW: Get working hours distribution by team
-    @Query("SELECT tm.workingHoursPerDay, COUNT(tm) FROM TeamMember tm WHERE tm.teamId = :teamId GROUP BY tm.workingHoursPerDay ORDER BY tm.workingHoursPerDay")
-    List<Object[]> getWorkingHoursDistributionByTeam(@Param("teamId") String teamId);
+    @Query("SELECT tm.workingHoursPerDay, COUNT(tm) FROM TeamMember tm WHERE tm.team.id = :teamId GROUP BY tm.workingHoursPerDay ORDER BY tm.workingHoursPerDay")
+    List<Object[]> getWorkingHoursDistributionByTeam(@Param("teamId") Long teamId);
+
+    // NEW: Get team statistics
+    @Query("SELECT tm.team.id, COUNT(tm), AVG(tm.age), SUM(CAST(tm.workingHoursPerDay AS int)) " +
+            "FROM TeamMember tm GROUP BY tm.team.id")
+    List<Object[]> getTeamStatistics();
 }
