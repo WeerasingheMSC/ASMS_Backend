@@ -2,8 +2,11 @@ package com.example.demo.controller;
 
 import com.example.demo.dto.ApiResponse;
 import com.example.demo.dto.EmployeeRequest;
+import com.example.demo.dto.ServiceRequest;
+import com.example.demo.dto.ServiceResponse;
 import com.example.demo.dto.UserResponse;
 import com.example.demo.service.AdminService;
+import com.example.demo.service.ServiceManagementService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -19,6 +22,7 @@ import java.util.List;
 public class AdminController {
 
     private final AdminService adminService;
+    private final ServiceManagementService serviceManagementService;
 
     @PostMapping("/employees")
     public ResponseEntity<ApiResponse> addEmployee(@Valid @RequestBody EmployeeRequest request) {
@@ -73,5 +77,55 @@ public class AdminController {
         ApiResponse response = adminService.deleteEmployee(id);
         return ResponseEntity.ok(response);
     }
-}
 
+    // Service Management Endpoints
+    @PostMapping("/services")
+    public ResponseEntity<ApiResponse> createService(@Valid @RequestBody ServiceRequest request) {
+        ApiResponse response = serviceManagementService.createService(request);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/services")
+    public ResponseEntity<List<ServiceResponse>> getAllServices() {
+        List<ServiceResponse> services = serviceManagementService.getAllServices();
+        return ResponseEntity.ok(services);
+    }
+
+    @GetMapping("/services/{id}")
+    public ResponseEntity<ServiceResponse> getServiceById(@PathVariable Long id) {
+        ServiceResponse service = serviceManagementService.getServiceById(id);
+        return ResponseEntity.ok(service);
+    }
+
+    @PutMapping("/services/{id}")
+    public ResponseEntity<ApiResponse> updateService(@PathVariable Long id, @Valid @RequestBody ServiceRequest request) {
+        ApiResponse response = serviceManagementService.updateService(id, request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/services/{id}/activate")
+    public ResponseEntity<ApiResponse> activateService(@PathVariable Long id) {
+        ApiResponse response = serviceManagementService.activateService(id);
+        return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/services/{id}/deactivate")
+    public ResponseEntity<ApiResponse> deactivateService(@PathVariable Long id) {
+        ApiResponse response = serviceManagementService.deactivateService(id);
+        return ResponseEntity.ok(response);
+    }
+
+    @DeleteMapping("/services/{id}")
+    public ResponseEntity<ApiResponse> deleteService(@PathVariable Long id) {
+        ApiResponse response = serviceManagementService.deleteService(id);
+        return ResponseEntity.ok(response);
+    }
+
+    // Profile Management
+    @PutMapping("/profile/update")
+    public ResponseEntity<UserResponse> updateAdminProfile(@Valid @RequestBody com.example.demo.dto.ProfileUpdateRequest request,
+                                                           @RequestHeader("Authorization") String token) {
+        UserResponse response = adminService.updateAdminProfile(request, token);
+        return ResponseEntity.ok(response);
+    }
+}
