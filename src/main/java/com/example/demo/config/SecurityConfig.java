@@ -60,6 +60,12 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/**").permitAll()
+
+                .requestMatchers("/ws/**").permitAll()  // Allow WebSocket endpoints
+                    .requestMatchers("/api/notifications/**").permitAll()
+
+                .requestMatchers("/api/customer/services").permitAll()  // Public access for booking
+
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 .requestMatchers("/api/employee/**").hasRole("EMPLOYEE")
                 .requestMatchers("/api/customer/**").hasRole("CUSTOMER")
@@ -69,6 +75,20 @@ public class SecurityConfig {
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOrigins(Arrays.asList("http://localhost:3000", "http://localhost:3001", "http://localhost:3004"));
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        configuration.setAllowedHeaders(Arrays.asList("*"));
+        configuration.setAllowCredentials(true);
+        configuration.setMaxAge(3600L);
+        
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
     }
 }
 
