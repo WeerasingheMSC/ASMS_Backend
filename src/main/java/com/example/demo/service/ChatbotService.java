@@ -50,7 +50,16 @@ public class ChatbotService {
      */
     @Transactional
     public ChatResponse sendMessage(ChatRequest request) {
-        User user = getCurrentUser();
+        log.info("Processing chat message: {}", request.getMessage());
+
+        User user;
+        try {
+            user = getCurrentUser();
+            log.info("User found: {}", user.getEmail());
+        } catch (Exception e) {
+            log.error("Error getting current user: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to get current user: " + e.getMessage(), e);
+        }
 
         // Generate session ID if not provided
         String sessionId = request.getSessionId();
@@ -60,27 +69,33 @@ public class ChatbotService {
 
         // TEST MODE: Return mock responses without calling external API
         if (testMode) {
-            log.info("TEST MODE: Returning mock response");
-            String mockResponse = generateMockResponse(request.getMessage());
+            try {
+                log.info("TEST MODE: Returning mock response for user: {}", user.getEmail());
+                String mockResponse = generateMockResponse(request.getMessage());
 
-            // Save to database
-            ChatMessage chatMessage = ChatMessage.builder()
-                    .user(user)
-                    .sessionId(sessionId)
-                    .message(request.getMessage())
-                    .response(mockResponse)
-                    .tokensUsed(0)
-                    .timestamp(LocalDateTime.now())
-                    .build();
+                // Save to database
+                ChatMessage chatMessage = ChatMessage.builder()
+                        .user(user)
+                        .sessionId(sessionId)
+                        .message(request.getMessage())
+                        .response(mockResponse)
+                        .tokensUsed(0)
+                        .timestamp(LocalDateTime.now())
+                        .build();
 
-            chatMessageRepository.save(chatMessage);
+                chatMessageRepository.save(chatMessage);
+                log.info("Chat message saved successfully");
 
-            return ChatResponse.builder()
-                    .response(mockResponse)
-                    .sessionId(sessionId)
-                    .timestamp(LocalDateTime.now())
-                    .tokensUsed(0)
-                    .build();
+                return ChatResponse.builder()
+                        .response(mockResponse)
+                        .sessionId(sessionId)
+                        .timestamp(LocalDateTime.now())
+                        .tokensUsed(0)
+                        .build();
+            } catch (Exception e) {
+                log.error("Error in test mode: {}", e.getMessage(), e);
+                throw new RuntimeException("Failed to process chat message in test mode: " + e.getMessage(), e);
+            }
         }
 
         // Get chat history for context (last 10 messages from this session)
@@ -245,10 +260,27 @@ public class ChatbotService {
      * Get the currently authenticated user
      */
     private User getCurrentUser() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        String email = authentication.getName();
-        return userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null) {
+                log.error("No authentication found in security context");
+                throw new RuntimeException("User not authenticated");
+            }
+
+            String username = authentication.getName();
+            log.info("Getting current user with username: {}", username);
+
+            // Try to find by username first, then by email
+            return userRepository.findByUsername(username)
+                    .or(() -> userRepository.findByEmail(username))
+                    .orElseThrow(() -> {
+                        log.error("User not found with username/email: {}", username);
+                        return new RuntimeException("User not found: " + username);
+                    });
+        } catch (Exception e) {
+            log.error("Error getting current user", e);
+            throw new RuntimeException("Failed to get current user: " + e.getMessage(), e);
+        }
     }
 
     /**
