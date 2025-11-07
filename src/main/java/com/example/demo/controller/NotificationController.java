@@ -6,6 +6,7 @@ import com.example.demo.model.User;
 import com.example.demo.repository.UserRepository;
 import com.example.demo.service.NotificationService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -16,7 +17,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/notifications")
-@CrossOrigin(origins = "*")
+@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:3001"}, allowCredentials = "true")
 public class NotificationController {
 
     @Autowired
@@ -30,30 +31,14 @@ public class NotificationController {
      */
     @GetMapping
     public ResponseEntity<ApiResponse<List<NotificationDTO>>> getAllNotifications() {
-        try {
-            User user = getAuthenticatedUser();
-            System.out.println("📋 Fetching notifications for user ID: " + user.getId());
+        Long userId = getAuthenticatedUserId();
+        List<NotificationDTO> notifications = notificationService.getNotificationsByUser(userId);
 
-            List<NotificationDTO> notifications = notificationService.getNotificationsByUser(user.getId());
-
-            System.out.println("✅ Found " + notifications.size() + " notifications");
-
-            return ResponseEntity.ok(ApiResponse.<List<NotificationDTO>>builder()
-                    .success(true)
-                    .message("Notifications retrieved successfully")
-                    .data(notifications != null ? notifications : Collections.emptyList())
-                    .build());
-        } catch (Exception e) {
-            System.err.println("❌ ERROR in getAllNotifications: " + e.getMessage());
-            e.printStackTrace();
-
-            // Return empty list instead of error
-            return ResponseEntity.ok(ApiResponse.<List<NotificationDTO>>builder()
-                    .success(true)
-                    .message("No notifications found")
-                    .data(Collections.emptyList())
-                    .build());
-        }
+        return ResponseEntity.ok(ApiResponse.<List<NotificationDTO>>builder()
+                .success(true)
+                .message("Notifications retrieved successfully")
+                .data(notifications)
+                .build());
     }
 
     /**
@@ -61,25 +46,14 @@ public class NotificationController {
      */
     @GetMapping("/unread")
     public ResponseEntity<ApiResponse<List<NotificationDTO>>> getUnreadNotifications() {
-        try {
-            User user = getAuthenticatedUser();
-            List<NotificationDTO> notifications = notificationService.getUnreadNotifications(user.getId());
+        Long userId = getAuthenticatedUserId();
+        List<NotificationDTO> notifications = notificationService.getUnreadNotifications(userId);
 
-            return ResponseEntity.ok(ApiResponse.<List<NotificationDTO>>builder()
-                    .success(true)
-                    .message("Unread notifications retrieved successfully")
-                    .data(notifications != null ? notifications : Collections.emptyList())
-                    .build());
-        } catch (Exception e) {
-            System.err.println("❌ ERROR in getUnreadNotifications: " + e.getMessage());
-            e.printStackTrace();
-
-            return ResponseEntity.ok(ApiResponse.<List<NotificationDTO>>builder()
-                    .success(true)
-                    .message("No unread notifications")
-                    .data(Collections.emptyList())
-                    .build());
-        }
+        return ResponseEntity.ok(ApiResponse.<List<NotificationDTO>>builder()
+                .success(true)
+                .message("Unread notifications retrieved successfully")
+                .data(notifications)
+                .build());
     }
 
     /**
@@ -87,25 +61,14 @@ public class NotificationController {
      */
     @GetMapping("/unread/count")
     public ResponseEntity<ApiResponse<Long>> getUnreadCount() {
-        try {
-            User user = getAuthenticatedUser();
-            long count = notificationService.getUnreadCount(user.getId());
+        Long userId = getAuthenticatedUserId();
+        long count = notificationService.getUnreadCount(userId);
 
-            return ResponseEntity.ok(ApiResponse.<Long>builder()
-                    .success(true)
-                    .message("Unread count retrieved successfully")
-                    .data(count)
-                    .build());
-        } catch (Exception e) {
-            System.err.println("❌ ERROR in getUnreadCount: " + e.getMessage());
-            e.printStackTrace();
-
-            return ResponseEntity.ok(ApiResponse.<Long>builder()
-                    .success(true)
-                    .message("No unread notifications")
-                    .data(0L)
-                    .build());
-        }
+        return ResponseEntity.ok(ApiResponse.<Long>builder()
+                .success(true)
+                .message("Unread count retrieved successfully")
+                .data(count)
+                .build());
     }
 
     /**
@@ -113,28 +76,13 @@ public class NotificationController {
      */
     @PutMapping("/{notificationId}/read")
     public ResponseEntity<ApiResponse<String>> markAsRead(@PathVariable Long notificationId) {
-        try {
-            User user = getAuthenticatedUser();
-            notificationService.markAsRead(notificationId, user.getId());
+        Long userId = getAuthenticatedUserId();
+        notificationService.markAsRead(notificationId, userId);
 
-            return ResponseEntity.ok(ApiResponse.<String>builder()
-                    .success(true)
-                    .message("Notification marked as read")
-                    .build());
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(ApiResponse.<String>builder()
-                    .success(false)
-                    .message(e.getMessage())
-                    .build());
-        } catch (Exception e) {
-            System.err.println("❌ ERROR in markAsRead: " + e.getMessage());
-            e.printStackTrace();
-
-            return ResponseEntity.status(500).body(ApiResponse.<String>builder()
-                    .success(false)
-                    .message("Error marking notification as read")
-                    .build());
-        }
+        return ResponseEntity.ok(ApiResponse.<String>builder()
+                .success(true)
+                .message("Notification marked as read")
+                .build());
     }
 
     /**
@@ -142,23 +90,13 @@ public class NotificationController {
      */
     @PutMapping("/read-all")
     public ResponseEntity<ApiResponse<String>> markAllAsRead() {
-        try {
-            User user = getAuthenticatedUser();
-            notificationService.markAllAsRead(user.getId());
+        Long userId = getAuthenticatedUserId();
+        notificationService.markAllAsRead(userId);
 
-            return ResponseEntity.ok(ApiResponse.<String>builder()
-                    .success(true)
-                    .message("All notifications marked as read")
-                    .build());
-        } catch (Exception e) {
-            System.err.println("❌ ERROR in markAllAsRead: " + e.getMessage());
-            e.printStackTrace();
-
-            return ResponseEntity.status(500).body(ApiResponse.<String>builder()
-                    .success(false)
-                    .message("Error marking all as read")
-                    .build());
-        }
+        return ResponseEntity.ok(ApiResponse.<String>builder()
+                .success(true)
+                .message("All notifications marked as read")
+                .build());
     }
 
     /**
@@ -166,55 +104,40 @@ public class NotificationController {
      */
     @DeleteMapping("/{notificationId}")
     public ResponseEntity<ApiResponse<String>> deleteNotification(@PathVariable Long notificationId) {
-        try {
-            User user = getAuthenticatedUser();
-            notificationService.deleteNotification(notificationId, user.getId());
+        Long userId = getAuthenticatedUserId();
+        notificationService.deleteNotification(notificationId, userId);
 
-            return ResponseEntity.ok(ApiResponse.<String>builder()
-                    .success(true)
-                    .message("Notification deleted successfully")
-                    .build());
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(ApiResponse.<String>builder()
-                    .success(false)
-                    .message(e.getMessage())
-                    .build());
-        } catch (Exception e) {
-            System.err.println("❌ ERROR in deleteNotification: " + e.getMessage());
-            e.printStackTrace();
-
-            return ResponseEntity.status(500).body(ApiResponse.<String>builder()
-                    .success(false)
-                    .message("Error deleting notification")
-                    .build());
-        }
+        return ResponseEntity.ok(ApiResponse.<String>builder()
+                .success(true)
+                .message("Notification deleted successfully")
+                .build());
     }
 
     /**
-     * Helper method to get authenticated user
+     * Get authenticated user ID from SecurityContext
      */
-    private User getAuthenticatedUser() {
-        try {
-            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+    private Long getAuthenticatedUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String username = authentication.getName();
 
-            if (authentication == null) {
-                System.err.println("❌ No authentication found in SecurityContext");
-                throw new IllegalArgumentException("Not authenticated");
-            }
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("User not found"));
 
-            String username = authentication.getName();
-            System.out.println("🔍 Authenticated username: " + username);
+        return user.getId();
+    }
 
-            User user = userRepository.findByUsername(username)
-                    .orElseThrow(() -> new IllegalArgumentException("User not found: " + username));
+    /**
+     * Global exception handler for this controller
+     */
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ApiResponse<Object>> handleException(Exception e) {
+        e.printStackTrace(); // Log the error
 
-            System.out.println("✅ Found user with ID: " + user.getId());
-
-            return user;
-        } catch (Exception e) {
-            System.err.println("❌ ERROR in getAuthenticatedUser: " + e.getMessage());
-            e.printStackTrace();
-            throw e;
-        }
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResponse.builder()
+                        .success(false)
+                        .message("Error: " + e.getMessage())
+                        .data(null)
+                        .build());
     }
 }
