@@ -58,6 +58,9 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/api/customer/services").permitAll()  // Public access for booking
+                .requestMatchers("/api/customer/faqs/**").permitAll()  // Public access for FAQs
+                .requestMatchers("/api/customer/questions/**").permitAll()  // Public access for submitting questions
+                .requestMatchers("/api/customer/my-questions/**").permitAll()  // Public access for viewing answered questions
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 .requestMatchers("/api/employee/**").hasRole("EMPLOYEE")
                 .requestMatchers("/api/customer/**").hasRole("CUSTOMER")
