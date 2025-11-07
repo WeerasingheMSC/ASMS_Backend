@@ -65,7 +65,10 @@ public class SecurityConfig {
                     .requestMatchers("/api/notifications/**").permitAll()
 
                 .requestMatchers("/api/customer/services").permitAll()  // Public access for booking
-
+                .requestMatchers("/api/customer/faqs/**").permitAll()  // Public access for FAQs
+                .requestMatchers("/api/customer/questions/**").permitAll()  // Public access for submitting questions
+                .requestMatchers("/api/customer/my-questions/**").permitAll()  // Public access for viewing answered questions
+                .requestMatchers("/api/customer/appointments/booked-slots").permitAll()  // Public access for checking booked slots
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 .requestMatchers("/api/employee/**").hasRole("EMPLOYEE")
                 .requestMatchers("/api/customer/**").hasRole("CUSTOMER")

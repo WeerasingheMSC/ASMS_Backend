@@ -11,11 +11,13 @@ import com.example.demo.service.ServiceManagementService;
 import com.example.demo.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -96,6 +98,14 @@ public class CustomerController {
         String username = authentication.getName();
         appointmentService.cancelAppointment(appointmentId, username);
         return ResponseEntity.ok(ApiResponse.success("Appointment cancelled successfully"));
+    }
+
+    // Get booked time slots for a specific date (PUBLIC - no authentication required)
+    @GetMapping("/appointments/booked-slots")
+    public ResponseEntity<List<String>> getBookedTimeSlots(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        List<String> bookedSlots = appointmentService.getBookedTimeSlots(date);
+        return ResponseEntity.ok(bookedSlots);
     }
 }
 

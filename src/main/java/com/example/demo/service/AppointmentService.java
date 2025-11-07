@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import java.time.LocalDate;
 
 @Service
 public class AppointmentService {
@@ -301,6 +302,11 @@ public class AppointmentService {
                 .status(appointment.getStatus().name())
                 .notes(appointment.getAdditionalRequirements())
                 .build();
+    }
+
+    // Get booked time slots for a specific date
+    public List<String> getBookedTimeSlots(LocalDate date) {
+        return appointmentRepository.findBookedTimeSlotsByDate(date);
     }
 }
 

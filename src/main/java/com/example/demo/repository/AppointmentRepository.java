@@ -24,4 +24,9 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
            "AND a.status NOT IN ('CANCELLED', 'REJECTED')")
     Long countAppointmentsByServiceAndDate(@Param("serviceType") String serviceType, 
                                            @Param("date") LocalDate date);
+
+    // Get all booked time slots for a specific date (excluding cancelled/rejected)
+    @Query("SELECT a.timeSlot FROM Appointment a WHERE CAST(a.appointmentDate AS date) = :date " +
+           "AND a.status NOT IN ('CANCELLED', 'REJECTED')")
+    List<String> findBookedTimeSlotsByDate(@Param("date") LocalDate date);
 }
