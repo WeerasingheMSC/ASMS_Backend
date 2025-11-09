@@ -4,10 +4,12 @@ package com.example.demo.service;
 import com.example.demo.dto.AppointmentDTO;
 import com.example.demo.dto.AppointmentAdminResponse;
 import com.example.demo.model.Appointment;
+import com.example.demo.model.AppointmentChangeRequest;
 import com.example.demo.model.AppointmentStatus;
 import com.example.demo.model.NotificationType;
 import com.example.demo.model.User;
 import com.example.demo.repository.AppointmentRepository;
+import com.example.demo.repository.AppointmentChangeRequestRepository;
 import com.example.demo.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -28,6 +30,9 @@ public class AppointmentService {
 
     @Autowired
     private NotificationService notificationService;
+
+    @Autowired
+    private AppointmentChangeRequestRepository changeRequestRepository;
 
     // Create an appointment
     public Appointment createAppointment(AppointmentDTO appointmentDTO, String username) {
@@ -307,6 +312,61 @@ public class AppointmentService {
     // Get booked time slots for a specific date
     public List<String> getBookedTimeSlots(LocalDate date) {
         return appointmentRepository.findBookedTimeSlotsByDate(date);
+    }
+
+    // Update appointment date/time/service/notes (only if approved change request exists)
+    public Appointment updateAppointment(Long appointmentId, AppointmentDTO appointmentDTO, String username) {
+        // Get the appointment
+        Appointment appointment = appointmentRepository.findById(appointmentId)
+                .orElseThrow(() -> new RuntimeException("Appointment not found"));
+
+        // Get the user
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // Verify the appointment belongs to the user
+        if (!appointment.getUser().getId().equals(user.getId())) {
+            throw new RuntimeException("You can only update your own appointments");
+        }
+
+        // Verify appointment is in editable state (PENDING or CONFIRMED)
+        if (appointment.getStatus() != AppointmentStatus.PENDING && 
+            appointment.getStatus() != AppointmentStatus.CONFIRMED) {
+            throw new RuntimeException("Cannot update appointments in " + appointment.getStatus() + " state");
+        }
+
+        // Verify there's an approved change request
+        Optional<AppointmentChangeRequest> approvedRequest = changeRequestRepository.findByAppointmentIdAndStatus(
+                appointmentId,
+                AppointmentChangeRequest.RequestStatus.APPROVED
+        );
+
+        if (!approvedRequest.isPresent()) {
+            throw new RuntimeException("No approved change request found for this appointment");
+        }
+
+        // Update date and time
+        appointment.setAppointmentDate(appointmentDTO.getAppointmentDate());
+        appointment.setTimeSlot(appointmentDTO.getTimeSlot());
+
+        // Update service if provided
+        if (appointmentDTO.getServiceCategory() != null && !appointmentDTO.getServiceCategory().isEmpty()) {
+            appointment.setServiceCategory(appointmentDTO.getServiceCategory());
+        }
+        if (appointmentDTO.getServiceType() != null && !appointmentDTO.getServiceType().isEmpty()) {
+            appointment.setServiceType(appointmentDTO.getServiceType());
+        }
+
+        // Update additional requirements/notes if provided
+        if (appointmentDTO.getAdditionalRequirements() != null) {
+            appointment.setAdditionalRequirements(appointmentDTO.getAdditionalRequirements());
+        }
+
+        Appointment updatedAppointment = appointmentRepository.save(appointment);
+
+        // TODO: Add notification for admins about the appointment update
+
+        return updatedAppointment;
     }
 }
 
