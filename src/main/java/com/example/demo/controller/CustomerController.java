@@ -100,6 +100,23 @@ public class CustomerController {
         return ResponseEntity.ok(ApiResponse.success("Appointment cancelled successfully"));
     }
 
+    //Update appointment date/time (only if approved change request exists)
+    @PutMapping("/appointments/{appointmentId}/update")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public ResponseEntity<?> updateAppointment(
+            @PathVariable Long appointmentId,
+            @RequestBody AppointmentDTO appointmentDTO,
+            Authentication authentication
+    ) {
+        String username = authentication.getName();
+        try {
+            Appointment updatedAppointment = appointmentService.updateAppointment(appointmentId, appointmentDTO, username);
+            return ResponseEntity.ok(updatedAppointment);
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+        }
+    }
+
     // Get booked time slots for a specific date (PUBLIC - no authentication required)
     @GetMapping("/appointments/booked-slots")
     public ResponseEntity<List<String>> getBookedTimeSlots(
