@@ -72,3 +72,5 @@ EMPLOYEE_PASSWORD_SETUP_GUIDE.md
 PROJECT_INFO.txt
 database_init.sql
 
+temp_auto_push.bat
+temp_interactive_push.bat
