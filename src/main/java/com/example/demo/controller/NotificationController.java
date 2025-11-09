@@ -114,6 +114,67 @@ public class NotificationController {
     }
 
     /**
+     * Send a test notification (for testing WebSocket connection)
+     * Only accessible by ADMIN role
+     */
+    @PostMapping("/test")
+    public ResponseEntity<ApiResponse<String>> sendTestNotification(
+            @RequestParam Long recipientId,
+            @RequestParam(required = false) String message
+    ) {
+        try {
+            String testMessage = message != null ? message : "This is a test notification!";
+            notificationService.createAndSendNotification(
+                    recipientId,
+                    null, // No appointment ID for test
+                    "Test Notification",
+                    testMessage,
+                    com.example.demo.model.NotificationType.APPOINTMENT_CREATED
+            );
+
+            return ResponseEntity.ok(ApiResponse.<String>builder()
+                    .success(true)
+                    .message("Test notification sent successfully to user " + recipientId)
+                    .build());
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.<String>builder()
+                            .success(false)
+                            .message("Failed to send test notification: " + e.getMessage())
+                            .build());
+        }
+    }
+
+    /**
+     * Send a test notification to all admins (for testing admin broadcast)
+     */
+    @PostMapping("/test/admin")
+    public ResponseEntity<ApiResponse<String>> sendTestAdminNotification(
+            @RequestParam(required = false) String message
+    ) {
+        try {
+            String testMessage = message != null ? message : "This is a test admin broadcast notification!";
+            notificationService.notifyAdmins(
+                    null, // No appointment ID for test
+                    "Test Admin Notification",
+                    testMessage,
+                    com.example.demo.model.NotificationType.APPOINTMENT_CREATED
+            );
+
+            return ResponseEntity.ok(ApiResponse.<String>builder()
+                    .success(true)
+                    .message("Test notification sent to all admins")
+                    .build());
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.<String>builder()
+                            .success(false)
+                            .message("Failed to send test admin notification: " + e.getMessage())
+                            .build());
+        }
+    }
+
+    /**
      * Get authenticated user ID from SecurityContext
      */
     private Long getAuthenticatedUserId() {
