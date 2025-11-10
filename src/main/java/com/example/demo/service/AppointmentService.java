@@ -4,18 +4,20 @@ package com.example.demo.service;
 import com.example.demo.dto.AppointmentDTO;
 import com.example.demo.dto.AppointmentAdminResponse;
 import com.example.demo.model.Appointment;
+import com.example.demo.model.AppointmentChangeRequest;
 import com.example.demo.model.AppointmentStatus;
+import com.example.demo.model.NotificationType;
 import com.example.demo.model.User;
 import com.example.demo.repository.AppointmentRepository;
+import com.example.demo.repository.AppointmentChangeRequestRepository;
 import com.example.demo.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
-    
+
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import java.time.LocalDate;
 
 @Service
 public class AppointmentService {
@@ -25,6 +27,12 @@ public class AppointmentService {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private NotificationService notificationService;
+
+    @Autowired
+    private AppointmentChangeRequestRepository changeRequestRepository;
 
     // Create an appointment
     public Appointment createAppointment(AppointmentDTO appointmentDTO, String username) {
@@ -47,7 +55,28 @@ public class AppointmentService {
         appointment.setStatus(AppointmentStatus.PENDING);  // Default to Pending
         appointment.setUser(user);  // Assign the logged-in user to the appointment
 
-        return appointmentRepository.save(appointment);
+        Appointment savedAppointment = appointmentRepository.save(appointment);
+
+        // Notify customer about appointment creation
+        notificationService.notifyCustomer(
+                user.getId(),
+                savedAppointment.getId(),
+                "Appointment Created",
+                "Your appointment for " + appointmentDTO.getVehicleBrand() + " " + appointmentDTO.getModel() +
+                " has been created successfully. Status: PENDING",
+                NotificationType.APPOINTMENT_CREATED
+        );
+
+        // Notify all admins about new appointment
+        notificationService.notifyAdmins(
+                savedAppointment.getId(),
+                "New Appointment",
+                "New appointment created by " + user.getFirstName() + " " + user.getLastName() +
+                " for " + appointmentDTO.getVehicleBrand() + " " + appointmentDTO.getModel(),
+                NotificationType.APPOINTMENT_CREATED
+        );
+
+        return savedAppointment;
     }
 
     // Get all appointments for the logged-in customer
@@ -83,7 +112,7 @@ public class AppointmentService {
     // Convert Appointment to AppointmentAdminResponse with customer details
     private AppointmentAdminResponse convertToAdminResponse(Appointment appointment) {
         User customer = appointment.getUser();
-        
+
         // Get assigned employee name if exists
         String assignedEmployeeName = null;
         if (appointment.getAssignedEmployeeId() != null) {
@@ -93,7 +122,7 @@ public class AppointmentService {
                 assignedEmployeeName = emp.getFirstName() + " " + emp.getLastName();
             }
         }
-        
+
         return AppointmentAdminResponse.builder()
                 .id(appointment.getId())
                 .vehicleType(appointment.getVehicleType())
@@ -130,7 +159,20 @@ public class AppointmentService {
         }
 
         appointment.setStatus(AppointmentStatus.CONFIRMED);
-        return appointmentRepository.save(appointment);
+        Appointment savedAppointment = appointmentRepository.save(appointment);
+
+        // Notify customer about appointment confirmation
+        User customer = appointment.getUser();
+        notificationService.notifyCustomer(
+                customer.getId(),
+                appointmentId,
+                "Appointment Confirmed",
+                "Your appointment for " + appointment.getVehicleBrand() + " " + appointment.getModel() +
+                " has been confirmed by admin.",
+                NotificationType.APPOINTMENT_CONFIRMED
+        );
+
+        return savedAppointment;
     }
 
     // Admin: Reject appointment (change status to CANCELLED)
@@ -139,7 +181,20 @@ public class AppointmentService {
                 .orElseThrow(() -> new IllegalArgumentException("Appointment not found"));
 
         appointment.setStatus(AppointmentStatus.CANCELLED);
-        return appointmentRepository.save(appointment);
+        Appointment savedAppointment = appointmentRepository.save(appointment);
+
+        // Notify customer about appointment cancellation
+        User customer = appointment.getUser();
+        notificationService.notifyCustomer(
+                customer.getId(),
+                appointmentId,
+                "Appointment Cancelled",
+                "Your appointment for " + appointment.getVehicleBrand() + " " + appointment.getModel() +
+                " has been cancelled by admin.",
+                NotificationType.APPOINTMENT_CANCELLED
+        );
+
+        return savedAppointment;
     }
 
     // Admin: Assign employee to appointment (change status to IN_SERVICE)
@@ -153,11 +208,34 @@ public class AppointmentService {
 
         // Assign the employee
         appointment.setAssignedEmployeeId(employeeId);
-        
+
         // Change status to IN_SERVICE
         appointment.setStatus(AppointmentStatus.IN_SERVICE);
-        
-        return appointmentRepository.save(appointment);
+
+        Appointment savedAppointment = appointmentRepository.save(appointment);
+
+        // Notify employee about assignment
+        notificationService.notifyEmployee(
+                employeeId,
+                appointmentId,
+                "New Appointment Assigned",
+                "You have been assigned to service " + appointment.getVehicleBrand() + " " +
+                appointment.getModel() + " (Reg: " + appointment.getRegisterNumber() + ")",
+                NotificationType.EMPLOYEE_ASSIGNED
+        );
+
+        // Notify customer about employee assignment
+        User customer = appointment.getUser();
+        notificationService.notifyCustomer(
+                customer.getId(),
+                appointmentId,
+                "Employee Assigned",
+                "Employee " + employee.getFirstName() + " " + employee.getLastName() +
+                " has been assigned to your appointment. Service is now in progress.",
+                NotificationType.STATUS_CHANGED_IN_SERVICE
+        );
+
+        return savedAppointment;
     }
 
     // Customer: Cancel an appointment
@@ -181,6 +259,28 @@ public class AppointmentService {
         // Update status
         appointment.setStatus(AppointmentStatus.CANCELLED);
         appointmentRepository.save(appointment);
+
+        // Notify admins about cancellation
+        notificationService.notifyAdmins(
+                appointmentId,
+                "Appointment Cancelled by Customer",
+                "Customer " + appointment.getUser().getFirstName() + " " +
+                appointment.getUser().getLastName() + " cancelled appointment for " +
+                appointment.getVehicleBrand() + " " + appointment.getModel(),
+                NotificationType.APPOINTMENT_CANCELLED
+        );
+
+        // Notify assigned employee if exists
+        if (appointment.getAssignedEmployeeId() != null) {
+            notificationService.notifyEmployee(
+                    appointment.getAssignedEmployeeId(),
+                    appointmentId,
+                    "Appointment Cancelled",
+                    "The appointment for " + appointment.getVehicleBrand() + " " +
+                    appointment.getModel() + " has been cancelled by the customer.",
+                    NotificationType.APPOINTMENT_CANCELLED
+            );
+        }
     }
 
     // Employee: Get appointments assigned to employee
@@ -208,4 +308,65 @@ public class AppointmentService {
                 .notes(appointment.getAdditionalRequirements())
                 .build();
     }
+
+    // Get booked time slots for a specific date
+    public List<String> getBookedTimeSlots(LocalDate date) {
+        return appointmentRepository.findBookedTimeSlotsByDate(date);
+    }
+
+    // Update appointment date/time/service/notes (only if approved change request exists)
+    public Appointment updateAppointment(Long appointmentId, AppointmentDTO appointmentDTO, String username) {
+        // Get the appointment
+        Appointment appointment = appointmentRepository.findById(appointmentId)
+                .orElseThrow(() -> new RuntimeException("Appointment not found"));
+
+        // Get the user
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // Verify the appointment belongs to the user
+        if (!appointment.getUser().getId().equals(user.getId())) {
+            throw new RuntimeException("You can only update your own appointments");
+        }
+
+        // Verify appointment is in editable state (PENDING or CONFIRMED)
+        if (appointment.getStatus() != AppointmentStatus.PENDING && 
+            appointment.getStatus() != AppointmentStatus.CONFIRMED) {
+            throw new RuntimeException("Cannot update appointments in " + appointment.getStatus() + " state");
+        }
+
+        // Verify there's an approved change request
+        Optional<AppointmentChangeRequest> approvedRequest = changeRequestRepository.findByAppointmentIdAndStatus(
+                appointmentId,
+                AppointmentChangeRequest.RequestStatus.APPROVED
+        );
+
+        if (!approvedRequest.isPresent()) {
+            throw new RuntimeException("No approved change request found for this appointment");
+        }
+
+        // Update date and time
+        appointment.setAppointmentDate(appointmentDTO.getAppointmentDate());
+        appointment.setTimeSlot(appointmentDTO.getTimeSlot());
+
+        // Update service if provided
+        if (appointmentDTO.getServiceCategory() != null && !appointmentDTO.getServiceCategory().isEmpty()) {
+            appointment.setServiceCategory(appointmentDTO.getServiceCategory());
+        }
+        if (appointmentDTO.getServiceType() != null && !appointmentDTO.getServiceType().isEmpty()) {
+            appointment.setServiceType(appointmentDTO.getServiceType());
+        }
+
+        // Update additional requirements/notes if provided
+        if (appointmentDTO.getAdditionalRequirements() != null) {
+            appointment.setAdditionalRequirements(appointmentDTO.getAdditionalRequirements());
+        }
+
+        Appointment updatedAppointment = appointmentRepository.save(appointment);
+
+        // TODO: Add notification for admins about the appointment update
+
+        return updatedAppointment;
+    }
 }
+
